@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 
-struct Vertex
+public struct Vertex
 {
     public Vector3D<float> pos;
     public Vector3D<float> color;
