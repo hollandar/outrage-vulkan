@@ -1,0 +1,16 @@
+<Project>
+	<ItemGroup>
+		<VertexShader Include="**/*.vert" />
+		<FragmentShader Include="**/*.frag" />
+	</ItemGroup>
+	
+	<Target Name="BuildVulkanShader" AfterTargets="Build">
+		<Message Text="VulkanBinPath: $(VulkanBinPath)" Importance="high" />
+		<Message Text="VertexShader: %(VertexShader.Identity).spv" Importance="high"/>
+		<Message Text="FragmentShader: %(FragmentShader.Identity).spv" Importance="high"/>
+		<MakeDir Directories="$(TargetDir)%(VertexShader.RelativeDir)" Condition="!Exists('$(TargetDir)%(VertexShader.RelativeDir)')"  />
+		<MakeDir Directories="$(TargetDir)%(FragmentShader.RelativeDir)" Condition="!Exists('$(TargetDir)%(FragmentShader.RelativeDir)')"  />
+		<Exec Command="$(VulkanBinPath)\glslc.exe &quot;%(VertexShader.FullPath)&quot; -o &quot;$(TargetDir)%(VertexShader.Identity).spv&quot;" Condition="'@(VertexShader)'!=''" />
+		<Exec Command="$(VulkanBinPath)\glslc.exe &quot;%(FragmentShader.FullPath)&quot; -o &quot;$(TargetDir)%(FragmentShader.Identity).spv&quot;" Condition="'@(FragmentShader)'!=''"/>
+	</Target>
+</Project>
