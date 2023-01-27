@@ -35,7 +35,7 @@ unsafe class HelloTriangleApplication
         KhrSwapchain.ExtensionName
     };
 
-    private IWindow? window;
+    private AppWindow? window;
     private Vk? vk;
 
     private Instance instance;
@@ -105,30 +105,12 @@ unsafe class HelloTriangleApplication
 
     public void Run()
     {
-        InitWindow();
+        window = new AppWindow(800, 600, "Vulkan");
+        window.Resize += FramebufferResizeCallback;
+
         InitVulkan();
         MainLoop();
         CleanUp();
-    }
-
-    private void InitWindow()
-    {
-        //Create a window.
-        var options = WindowOptions.DefaultVulkan with
-        {
-            Size = new Vector2D<int>(WIDTH, HEIGHT),
-            Title = "Vulkan",
-        };
-
-        window = Window.Create(options);
-        window.Initialize();
-
-        if (window.VkSurface is null)
-        {
-            throw new Exception("Windowing platform doesn't support Vulkan.");
-        }
-
-        window.Resize += FramebufferResizeCallback;
     }
 
     private void FramebufferResizeCallback(Vector2D<int> obj)
@@ -377,7 +359,7 @@ unsafe class HelloTriangleApplication
             throw new NotSupportedException("KHR_surface extension not found.");
         }
 
-        surface = window!.VkSurface!.Create<AllocationCallbacks>(instance.ToHandle(), null).ToSurface();
+        surface = window.GetVulkanSurface().Create<AllocationCallbacks>(instance.ToHandle(), null).ToSurface();
     }
 
     private void PickPhysicalDevice()
@@ -2016,7 +1998,7 @@ unsafe class HelloTriangleApplication
 
     private string[] GetRequiredExtensions()
     {
-        var glfwExtensions = window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
+        var glfwExtensions = window!.GetVulkanSurface().GetRequiredExtensions(out var glfwExtensionCount);
         var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
 
         if (EnableValidationLayers)
