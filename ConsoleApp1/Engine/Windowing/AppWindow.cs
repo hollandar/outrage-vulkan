@@ -11,9 +11,9 @@ using System.Text;
 using System.Threading.Tasks;
 using static Silk.NET.GLFW.GlfwCallbacks;
 
-namespace ConsoleApp1
+namespace ConsoleApp1.Engine.Windowing
 {
-    internal class AppWindow : IDisposable
+    internal class AppWindow : IDisposable, IAppWindow
     {
         private string title = "Vulkan";
         private int width = 800;
@@ -42,19 +42,19 @@ namespace ConsoleApp1
             window.Render += Window_Render;
         }
 
-        public Vector2D<int> FramebufferSize { get => this.window.FramebufferSize; }
-        public double Time { get => this.window.Time; }
+        public Vector2D<int> FramebufferSize { get => window.FramebufferSize; }
+        public double Time { get => window.Time; }
 
         private void Window_Render(double delta)
         {
-            if (this.Render != null)
-                this.Render(delta);
+            if (Render != null)
+                Render(delta);
         }
 
         private void Window_Resize(Vector2D<int> obj)
         {
-            if (this.Resize != null)
-                this.Resize(obj);
+            if (Resize != null)
+                Resize(obj);
         }
 
         public void Run()
@@ -74,12 +74,12 @@ namespace ConsoleApp1
                 throw new Exception("Windowing platform doesn't support Vulkan.");
             }
 
-            return this.window.VkSurface;
+            return window.VkSurface;
         }
 
         public void Dispose()
         {
-            this.window.Dispose();
+            window.Dispose();
         }
     }
 }

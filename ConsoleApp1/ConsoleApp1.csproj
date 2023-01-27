@@ -27,18 +27,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Compile Remove="Engine\Vulkan\VulkanEngine.cs" />
-	</ItemGroup>
-
-	<ItemGroup>
 	  <FragmentShader Remove="Shaders\default\shader.frag" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <VertexShader Remove="Shaders\default\shader.vert" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Engine\Vulkan\" />
 	</ItemGroup>
 </Project>
