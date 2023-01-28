@@ -22,6 +22,7 @@ namespace ConsoleApp1.Engine.Vulkan
         const int MAX_FRAMES_IN_FLIGHT = 2;
         const string MODEL_PATH = @"Assets\viking_room.obj";
         private VulkanModelsBuffer modelsBuffer;
+        private VulkanTextures vulkanTextures;
 
         bool framebufferResized = false;
         private IAppWindow appWindow;
@@ -64,11 +65,6 @@ namespace ConsoleApp1.Engine.Vulkan
         private DeviceMemory depthImageMemory;
         private ImageView depthImageView;
         private Framebuffer[]? swapChainFramebuffers;
-        private uint mipLevels;
-        private Image textureImage;
-        private DeviceMemory textureImageMemory;
-        private ImageView textureImageView;
-        private Sampler textureSampler;
         private Buffer[]? uniformBuffers;
         private DeviceMemory[]? uniformBuffersMemory;
         private DescriptorPool descriptorPool;
@@ -94,6 +90,7 @@ namespace ConsoleApp1.Engine.Vulkan
         public Vk Api { get => this.api; }
         public CommandPool CommandPool { get => this.commandPool; }
         public Device Device { get => this.device; }
+        public PhysicalDevice PhysicalDevice { get => this.physicalDevice; }
         public RenderPass RenderPass { get => this.renderPass; }
         public Framebuffer[] Framebuffers { get => this.swapChainFramebuffers; }
         public Extent2D SwapChainExtent { get => this.swapChainExtent; }
@@ -123,9 +120,12 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateDepthResources();
             CreateFramebuffers();
 
-            CreateTextureImage();
-            CreateTextureImageView();
-            CreateTextureSampler();
+            var texture = new Texture(TEXTURE_PATH);
+            var textureCollection = new TexturesCollection();
+            textureCollection.AddTexture(texture);
+            vulkanTextures = new VulkanTextures(this);
+            vulkanTextures.BindTextures(textureCollection);
+
             CreateUniformBuffers();
             CreateDescriptorPool();
             CreateDescriptorSets();
@@ -644,7 +644,7 @@ namespace ConsoleApp1.Engine.Vulkan
             }
         }
 
-        private ImageView CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels)
+        public ImageView CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels)
         {
             ImageViewCreateInfo createInfo = new()
             {
@@ -1069,7 +1069,7 @@ namespace ConsoleApp1.Engine.Vulkan
             colorImageView = CreateImageView(colorImage, colorFormat, ImageAspectFlags.ColorBit, 1);
         }
 
-        private void CreateImage(uint width, uint height, uint mipLevels, SampleCountFlags numSamples, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
+        public void CreateImage(uint width, uint height, uint mipLevels, SampleCountFlags numSamples, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
         {
             ImageCreateInfo imageInfo = new()
             {
@@ -1173,34 +1173,6 @@ namespace ConsoleApp1.Engine.Vulkan
             }
         }
 
-        private void CreateTextureImage()
-        {
-            using var img = new Texture(TEXTURE_PATH);
-
-            ulong imageSize = (ulong)(img.Width * img.Height * img.BitsPerPixel / 8);
-            mipLevels = (uint)(Math.Floor(Math.Log2(Math.Max(img.Width, img.Height))) + 1);
-
-            Buffer stagingBuffer = default;
-            DeviceMemory stagingBufferMemory = default;
-            CreateBuffer(imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
-
-            void* data;
-            api!.MapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-            img.CopyTo(new Span<byte>(data, (int)imageSize));
-            api!.UnmapMemory(device, stagingBufferMemory);
-
-            CreateImage((uint)img.Width, (uint)img.Height, mipLevels, SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit, MemoryPropertyFlags.DeviceLocalBit, ref textureImage, ref textureImageMemory);
-
-            TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, mipLevels);
-            CopyBufferToImage(stagingBuffer, textureImage, (uint)img.Width, (uint)img.Height);
-            //Transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
-
-            api!.DestroyBuffer(device, stagingBuffer, null);
-            api!.FreeMemory(device, stagingBufferMemory, null);
-
-            GenerateMipMaps(textureImage, Format.R8G8B8A8Srgb, (uint)img.Width, (uint)img.Height, mipLevels);
-        }
-
         public void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
         {
             BufferCreateInfo bufferInfo = new()
@@ -1240,7 +1212,7 @@ namespace ConsoleApp1.Engine.Vulkan
             api!.BindBufferMemory(device, buffer, bufferMemory, 0);
         }
 
-        private void TransitionImageLayout(Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels)
+        public void TransitionImageLayout(Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels)
         {
             CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
@@ -1292,7 +1264,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
         }
 
-        private void CopyBufferToImage(Buffer buffer, Image image, uint width, uint height)
+        public void CopyBufferToImage(Buffer buffer, Image image, uint width, uint height)
         {
             CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
@@ -1318,7 +1290,7 @@ namespace ConsoleApp1.Engine.Vulkan
             EndSingleTimeCommands(commandBuffer);
         }
 
-        private void GenerateMipMaps(Image image, Format imageFormat, uint width, uint height, uint mipLevels)
+        public void GenerateMipMaps(Image image, Format imageFormat, uint width, uint height, uint mipLevels)
         {
             api!.GetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, out var formatProperties);
 
@@ -1478,46 +1450,6 @@ namespace ConsoleApp1.Engine.Vulkan
             EndSingleTimeCommands(commandBuffer);
         }
 
-        private void CreateTextureImageView()
-        {
-            textureImageView = CreateImageView(textureImage, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit, mipLevels);
-        }
-
-        private void CreateTextureSampler()
-        {
-            PhysicalDeviceProperties properties;
-            api!.GetPhysicalDeviceProperties(physicalDevice, out properties);
-
-            SamplerCreateInfo samplerInfo = new()
-            {
-                SType = StructureType.SamplerCreateInfo,
-                MagFilter = Filter.Linear,
-                MinFilter = Filter.Linear,
-                AddressModeU = SamplerAddressMode.Repeat,
-                AddressModeV = SamplerAddressMode.Repeat,
-                AddressModeW = SamplerAddressMode.Repeat,
-                AnisotropyEnable = true,
-                MaxAnisotropy = properties.Limits.MaxSamplerAnisotropy,
-                BorderColor = BorderColor.IntOpaqueBlack,
-                UnnormalizedCoordinates = false,
-                CompareEnable = false,
-                CompareOp = CompareOp.Always,
-                MipmapMode = SamplerMipmapMode.Linear,
-                MinLod = 0,
-                MaxLod = mipLevels,
-                MipLodBias = 0,
-            };
-
-            fixed (Sampler* textureSamplerPtr = &textureSampler)
-            {
-                if (api!.CreateSampler(device, samplerInfo, null, textureSamplerPtr) != Result.Success)
-                {
-                    throw new Exception("failed to create texture sampler!");
-                }
-            }
-        }
-
-
         private void CreateUniformBuffers()
         {
             ulong bufferSize = (ulong)Unsafe.SizeOf<UniformBufferObject>();
@@ -1599,6 +1531,7 @@ namespace ConsoleApp1.Engine.Vulkan
             }
 
 
+            var texture = vulkanTextures.GetTexture(0);
             for (int i = 0; i < swapChainImages.Length; i++)
             {
                 DescriptorBufferInfo bufferInfo = new()
@@ -1612,8 +1545,8 @@ namespace ConsoleApp1.Engine.Vulkan
                 DescriptorImageInfo imageInfo = new()
                 {
                     ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-                    ImageView = textureImageView,
-                    Sampler = textureSampler,
+                    ImageView = texture.ImageView,
+                    Sampler = texture.Sampler,
                 };
 
                 var descriptorWrites = new WriteDescriptorSet[]
@@ -1871,11 +1804,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
             CleanUpSwapChain();
 
-            api!.DestroySampler(device, textureSampler, null);
-            api!.DestroyImageView(device, textureImageView, null);
-
-            api!.DestroyImage(device, textureImage, null);
-            api!.FreeMemory(device, textureImageMemory, null);
+            vulkanTextures.Dispose();
 
             api!.DestroyDescriptorSetLayout(device, descriptorSetLayout, null);
 

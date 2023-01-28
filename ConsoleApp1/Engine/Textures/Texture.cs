@@ -3,7 +3,7 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace ConsoleApp1.Engine.Textures
 {
-    internal class Texture : IDisposable
+    public class Texture : IDisposable
     {
         private string texturePath;
         private Image<Rgba32> image;
