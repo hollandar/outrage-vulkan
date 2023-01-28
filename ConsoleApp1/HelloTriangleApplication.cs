@@ -12,8 +12,8 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 unsafe class HelloTriangleApplication
 {
-    const int WIDTH = 800;
-    const int HEIGHT = 600;
+    const int WIDTH = 1024;
+    const int HEIGHT = 768;
 
     public void Run()
     {

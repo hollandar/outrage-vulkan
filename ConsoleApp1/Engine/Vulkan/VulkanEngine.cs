@@ -16,14 +16,15 @@ namespace ConsoleApp1.Engine.Vulkan
     public unsafe class VulkanEngine: IDisposable
     {
 
-        const string MODEL_PATH = @"Assets\viking_room.obj";
         const string TEXTURE_PATH = @"Assets\viking_room.png";
         const int MAX_FRAMES_IN_FLIGHT = 2;
+        const string MODEL_PATH = @"Assets\viking_room.obj";
+        private Model model;
 
         bool framebufferResized = false;
         private IAppWindow appWindow;
         private IVkSurface windowSurface;
-        private Vk? vk;
+        private Vk vk;
         private Instance instance;
         readonly bool enableValidationLayers = true;
         private readonly string[] validationLayers = new[]
@@ -66,7 +67,6 @@ namespace ConsoleApp1.Engine.Vulkan
         private DeviceMemory textureImageMemory;
         private ImageView textureImageView;
         private Sampler textureSampler;
-        private Model model;
         private Buffer vertexBuffer;
         private DeviceMemory vertexBufferMemory;
         private Buffer indexBuffer;
@@ -75,7 +75,7 @@ namespace ConsoleApp1.Engine.Vulkan
         private DeviceMemory[]? uniformBuffersMemory;
         private DescriptorPool descriptorPool;
         private DescriptorSet[]? descriptorSets;
-        private CommandBuffer[]? commandBuffers;
+        private VulkanCommandBuffers? commandBuffers;
         private Semaphore[]? imageAvailableSemaphores;
         private Semaphore[]? renderFinishedSemaphores;
         private Fence[]? inFlightFences;
@@ -88,9 +88,24 @@ namespace ConsoleApp1.Engine.Vulkan
             this.windowSurface = appWindow.GetVulkanSurface();
             this.enableValidationLayers = enableValidationLayers;
             appWindow.Resize += FramebufferResized;
+
+            this.model = new Model(MODEL_PATH);
+
             InitVulkan();
         }
 
+        public Vk Api { get => this.vk; }
+        public CommandPool CommandPool { get => this.commandPool; }
+        public Device Device { get => this.device; }
+        public RenderPass RenderPass { get => this.renderPass; }
+        public Framebuffer[] Framebuffers { get => this.swapChainFramebuffers; }
+        public Extent2D SwapChainExtent { get => this.swapChainExtent; }
+        public Pipeline Pipeline { get => this.graphicsPipeline; }
+        /* TEMPORARY */ public Model Model { get => this.model; }
+        /* TEMPORARY */ public Buffer VertexBuffer { get => this.vertexBuffer; }
+        /* TEMPORARY */ public Buffer IndexBuffer { get => this.indexBuffer; }
+        public PipelineLayout PipelineLayout { get => this.pipelineLayout; }
+        public DescriptorSet[] DescriptorSets { get => this.descriptorSets; }
         private void FramebufferResized(Silk.NET.Maths.Vector2D<int> obj)
         {
             framebufferResized = true;
@@ -115,13 +130,12 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateTextureImage();
             CreateTextureImageView();
             CreateTextureSampler();
-            this.model = new Model(MODEL_PATH);
             CreateVertexBuffer();
             CreateIndexBuffer();
             CreateUniformBuffers();
             CreateDescriptorPool();
             CreateDescriptorSets();
-            CreateCommandBuffers();
+            this.commandBuffers = new VulkanCommandBuffers(this, swapChainFramebuffers!.Length);
             CreateSyncObjects();
             appWindow!.Render += DrawFrame;
         }
@@ -1659,101 +1673,6 @@ namespace ConsoleApp1.Engine.Vulkan
         }
 
 
-
-
-        private void CreateCommandBuffers()
-        {
-            commandBuffers = new CommandBuffer[swapChainFramebuffers!.Length];
-
-            CommandBufferAllocateInfo allocInfo = new()
-            {
-                SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = commandPool,
-                Level = CommandBufferLevel.Primary,
-                CommandBufferCount = (uint)commandBuffers.Length,
-            };
-
-            fixed (CommandBuffer* commandBuffersPtr = commandBuffers)
-            {
-                if (vk!.AllocateCommandBuffers(device, allocInfo, commandBuffersPtr) != Result.Success)
-                {
-                    throw new Exception("failed to allocate command buffers!");
-                }
-            }
-
-
-            for (int i = 0; i < commandBuffers.Length; i++)
-            {
-                CommandBufferBeginInfo beginInfo = new()
-                {
-                    SType = StructureType.CommandBufferBeginInfo,
-                };
-
-                if (vk!.BeginCommandBuffer(commandBuffers[i], beginInfo) != Result.Success)
-                {
-                    throw new Exception("failed to begin recording command buffer!");
-                }
-
-                RenderPassBeginInfo renderPassInfo = new()
-                {
-                    SType = StructureType.RenderPassBeginInfo,
-                    RenderPass = renderPass,
-                    Framebuffer = swapChainFramebuffers[i],
-                    RenderArea =
-                {
-                    Offset = { X = 0, Y = 0 },
-                    Extent = swapChainExtent,
-                }
-                };
-
-                var clearValues = new ClearValue[]
-                {
-                new()
-                {
-                    Color = new (){ Float32_0 = 0, Float32_1 = 0, Float32_2 = 0, Float32_3 = 1 },
-                },
-                new()
-                {
-                    DepthStencil = new () { Depth = 1, Stencil = 0 }
-                }
-                };
-
-
-                fixed (ClearValue* clearValuesPtr = clearValues)
-                {
-                    renderPassInfo.ClearValueCount = (uint)clearValues.Length;
-                    renderPassInfo.PClearValues = clearValuesPtr;
-
-                    vk!.CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, SubpassContents.Inline);
-                }
-
-                vk!.CmdBindPipeline(commandBuffers[i], PipelineBindPoint.Graphics, graphicsPipeline);
-
-                var vertexBuffers = new Buffer[] { vertexBuffer };
-                var offsets = new ulong[] { 0 };
-
-                fixed (ulong* offsetsPtr = offsets)
-                fixed (Buffer* vertexBuffersPtr = vertexBuffers)
-                {
-                    vk!.CmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffersPtr, offsetsPtr);
-                }
-
-                vk!.CmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, IndexType.Uint32);
-
-                vk!.CmdBindDescriptorSets(commandBuffers[i], PipelineBindPoint.Graphics, pipelineLayout, 0, 1, descriptorSets![i], 0, null);
-
-                vk!.CmdDrawIndexed(commandBuffers[i], (uint)this.model.IndicesLength, 1, 0, 0, 0);
-
-                vk!.CmdEndRenderPass(commandBuffers[i]);
-
-                if (vk!.EndCommandBuffer(commandBuffers[i]) != Result.Success)
-                {
-                    throw new Exception("failed to record command buffer!");
-                }
-
-            }
-        }
-
         private void CreateSyncObjects()
         {
             imageAvailableSemaphores = new Semaphore[MAX_FRAMES_IN_FLIGHT];
@@ -1816,7 +1735,7 @@ namespace ConsoleApp1.Engine.Vulkan
             var waitSemaphores = stackalloc[] { imageAvailableSemaphores[currentFrame] };
             var waitStages = stackalloc[] { PipelineStageFlags.ColorAttachmentOutputBit };
 
-            var buffer = commandBuffers![imageIndex];
+            var buffer = commandBuffers!.FrameCommandBuffers[imageIndex];
 
             submitInfo = submitInfo with
             {
@@ -1896,7 +1815,7 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateUniformBuffers();
             CreateDescriptorPool();
             CreateDescriptorSets();
-            CreateCommandBuffers();
+            this.commandBuffers = new VulkanCommandBuffers(this, swapChainFramebuffers!.Length);
 
             imagesInFlight = new Fence[swapChainImages!.Length];
         }
@@ -1916,10 +1835,8 @@ namespace ConsoleApp1.Engine.Vulkan
                 vk!.DestroyFramebuffer(device, framebuffer, null);
             }
 
-            fixed (CommandBuffer* commandBuffersPtr = commandBuffers)
-            {
-                vk!.FreeCommandBuffers(device, commandPool, (uint)commandBuffers!.Length, commandBuffersPtr);
-            }
+            this.commandBuffers.Dispose();
+            this.commandBuffers = null;
 
             vk!.DestroyPipeline(device, graphicsPipeline, null);
             vk!.DestroyPipelineLayout(device, pipelineLayout, null);
