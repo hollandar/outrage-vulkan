@@ -1,4 +1,5 @@
 ﻿using ConsoleApp1.Engine.Models;
+using ConsoleApp1.Engine.Textures;
 using ConsoleApp1.Engine.Windowing;
 using Silk.NET.Core;
 using Silk.NET.Core.Contexts;
@@ -121,6 +122,7 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateColorResources();
             CreateDepthResources();
             CreateFramebuffers();
+
             CreateTextureImage();
             CreateTextureImageView();
             CreateTextureSampler();
@@ -800,6 +802,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
         private void CreateDescriptorSetLayout()
         {
+
             DescriptorSetLayoutBinding uboLayoutBinding = new()
             {
                 Binding = 0,
@@ -809,16 +812,26 @@ namespace ConsoleApp1.Engine.Vulkan
                 StageFlags = ShaderStageFlags.VertexBit,
             };
 
-            DescriptorSetLayoutBinding samplerLayoutBinding = new()
+            DescriptorSetLayoutBinding localNodeMatrixBinding = new()
             {
                 Binding = 1,
+                DescriptorCount = 1,
+                DescriptorType = DescriptorType.UniformBufferDynamic,
+                PImmutableSamplers = null,
+                StageFlags = ShaderStageFlags.VertexBit,
+            };
+
+            DescriptorSetLayoutBinding samplerLayoutBinding = new()
+            {
+                Binding = 2,
                 DescriptorCount = 1,
                 DescriptorType = DescriptorType.CombinedImageSampler,
                 PImmutableSamplers = null,
                 StageFlags = ShaderStageFlags.FragmentBit,
             };
 
-            var bindings = new DescriptorSetLayoutBinding[] { uboLayoutBinding, samplerLayoutBinding };
+
+            var bindings = new DescriptorSetLayoutBinding[] { uboLayoutBinding, samplerLayoutBinding, localNodeMatrixBinding };
 
             fixed (DescriptorSetLayoutBinding* bindingsPtr = bindings)
             fixed (DescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
@@ -1162,9 +1175,9 @@ namespace ConsoleApp1.Engine.Vulkan
 
         private void CreateTextureImage()
         {
-            using var img = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(TEXTURE_PATH);
+            using var img = new Texture(TEXTURE_PATH);
 
-            ulong imageSize = (ulong)(img.Width * img.Height * img.PixelType.BitsPerPixel / 8);
+            ulong imageSize = (ulong)(img.Width * img.Height * img.BitsPerPixel / 8);
             mipLevels = (uint)(Math.Floor(Math.Log2(Math.Max(img.Width, img.Height))) + 1);
 
             Buffer stagingBuffer = default;
@@ -1173,7 +1186,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
             void* data;
             api!.MapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-            img.CopyPixelDataTo(new Span<byte>(data, (int)imageSize));
+            img.CopyTo(new Span<byte>(data, (int)imageSize));
             api!.UnmapMemory(device, stagingBufferMemory);
 
             CreateImage((uint)img.Width, (uint)img.Height, mipLevels, SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit, MemoryPropertyFlags.DeviceLocalBit, ref textureImage, ref textureImageMemory);
@@ -1530,6 +1543,11 @@ namespace ConsoleApp1.Engine.Vulkan
             },
             new DescriptorPoolSize()
             {
+                Type = DescriptorType.UniformBufferDynamic,
+                DescriptorCount = (uint)swapChainImages!.Length,
+            },
+            new DescriptorPoolSize()
+            {
                 Type = DescriptorType.CombinedImageSampler,
                 DescriptorCount = (uint)swapChainImages!.Length,
             }
@@ -1615,6 +1633,16 @@ namespace ConsoleApp1.Engine.Vulkan
                     SType = StructureType.WriteDescriptorSet,
                     DstSet = descriptorSets[i],
                     DstBinding = 1,
+                    DstArrayElement = 0,
+                    DescriptorType = DescriptorType.UniformBufferDynamic,
+                    DescriptorCount = 1,
+                    PBufferInfo = &bufferInfo,
+                },
+                new()
+                {
+                    SType = StructureType.WriteDescriptorSet,
+                    DstSet = descriptorSets[i],
+                    DstBinding = 2,
                     DstArrayElement = 0,
                     DescriptorType = DescriptorType.CombinedImageSampler,
                     DescriptorCount = 1,
