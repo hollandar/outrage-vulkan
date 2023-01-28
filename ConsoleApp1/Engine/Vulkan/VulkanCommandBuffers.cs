@@ -7,15 +7,25 @@ namespace ConsoleApp1.Engine.Vulkan
     internal class VulkanCommandBuffers: IDisposable
     {
         private VulkanEngine vulkanEngine { get; set; }
+
+        private readonly VulkanModelsBuffer modelBuffers;
         private int frameCount;
         private CommandBuffer[]? commandBuffers;
 
-        public VulkanCommandBuffers (VulkanEngine engine, int frameCount)
+        public VulkanCommandBuffers (VulkanEngine engine, VulkanModelsBuffer modelBuffers, int frameCount)
         {
+            if (!modelBuffers.Bound)
+            {
+                throw new ArgumentException("VulkanModelsBuffer has no models bound to it.");
+            }
+
             this.vulkanEngine = engine;
+            this.modelBuffers = modelBuffers;
             this.frameCount = frameCount;
             CreateCommandBuffers();
         }
+
+
 
         public CommandBuffer[] FrameCommandBuffers { get => this.commandBuffers; }
         private unsafe void CreateCommandBuffers()
@@ -86,20 +96,25 @@ namespace ConsoleApp1.Engine.Vulkan
 
                 vulkanEngine.Api.CmdBindPipeline(commandBuffers[i], PipelineBindPoint.Graphics, vulkanEngine.Pipeline);
 
-                var vertexBuffers = new Buffer[] { vulkanEngine.VertexBuffer };
-                var offsets = new ulong[] { 0 };
+                var vertexBuffers = new Buffer[] { modelBuffers.VertexBuffer };
+                var modelOffset = modelBuffers.GetModelOffset(0);
+                var offsets = new ulong[] { modelOffset.VertexOffset };
+                var sizes = new ulong[] { modelOffset.VertexSize };
+                var strides = new ulong[] { modelOffset.VertexCount };
 
                 fixed (ulong* offsetsPtr = offsets)
+                fixed (ulong* sizesPtr = sizes)
+                fixed (ulong* stridesPtr = strides)
                 fixed (Buffer* vertexBuffersPtr = vertexBuffers)
                 {
                     vulkanEngine.Api.CmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffersPtr, offsetsPtr);
                 }
 
-                vulkanEngine.Api.CmdBindIndexBuffer(commandBuffers[i], vulkanEngine.IndexBuffer, 0, IndexType.Uint32);
+                vulkanEngine.Api.CmdBindIndexBuffer(commandBuffers[i], modelBuffers.IndexBuffer, modelOffset.IndexOffset, IndexType.Uint32);
 
                 vulkanEngine.Api.CmdBindDescriptorSets(commandBuffers[i], PipelineBindPoint.Graphics, vulkanEngine.PipelineLayout, 0, 1, vulkanEngine.DescriptorSets![i], 0, null);
 
-                vulkanEngine.Api.CmdDrawIndexed(commandBuffers[i], (uint)vulkanEngine.Model.IndicesLength, 1, 0, 0, 0);
+                vulkanEngine.Api.CmdDrawIndexed(commandBuffers[i], (uint)modelOffset.IndexCount, 1, 0, 0, 0);
 
                 vulkanEngine.Api.CmdEndRenderPass(commandBuffers[i]);
 

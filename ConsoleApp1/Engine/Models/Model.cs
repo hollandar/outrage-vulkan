@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ConsoleApp1
+namespace ConsoleApp1.Engine.Models
 {
     public class Model
     {
@@ -22,9 +22,9 @@ namespace ConsoleApp1
         }
 
         public Vertex[]? Vertices => vertices;
-        public int VerticesLength => vertices?.Length ?? 0;
+        public int VertexCount => vertices?.Length ?? 0;
         public uint[]? Indices => indices;
-        public int IndicesLength => indices?.Length ?? 0;
+        public int IndexCount => indices?.Length ?? 0;
 
         private unsafe void LoadModel(string modelPath)
         {

@@ -1,4 +1,5 @@
-﻿using ConsoleApp1.Engine.Windowing;
+﻿using ConsoleApp1.Engine.Models;
+using ConsoleApp1.Engine.Windowing;
 using Silk.NET.Core;
 using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
@@ -19,7 +20,7 @@ namespace ConsoleApp1.Engine.Vulkan
         const string TEXTURE_PATH = @"Assets\viking_room.png";
         const int MAX_FRAMES_IN_FLIGHT = 2;
         const string MODEL_PATH = @"Assets\viking_room.obj";
-        private Model model;
+        private VulkanModelsBuffer modelsBuffer;
 
         bool framebufferResized = false;
         private IAppWindow appWindow;
@@ -67,10 +68,6 @@ namespace ConsoleApp1.Engine.Vulkan
         private DeviceMemory textureImageMemory;
         private ImageView textureImageView;
         private Sampler textureSampler;
-        private Buffer vertexBuffer;
-        private DeviceMemory vertexBufferMemory;
-        private Buffer indexBuffer;
-        private DeviceMemory indexBufferMemory;
         private Buffer[]? uniformBuffers;
         private DeviceMemory[]? uniformBuffersMemory;
         private DescriptorPool descriptorPool;
@@ -89,9 +86,8 @@ namespace ConsoleApp1.Engine.Vulkan
             this.enableValidationLayers = enableValidationLayers;
             appWindow.Resize += FramebufferResized;
 
-            this.model = new Model(MODEL_PATH);
 
-            InitVulkan();
+            InitVulkan();            
         }
 
         public Vk Api { get => this.vk; }
@@ -101,9 +97,6 @@ namespace ConsoleApp1.Engine.Vulkan
         public Framebuffer[] Framebuffers { get => this.swapChainFramebuffers; }
         public Extent2D SwapChainExtent { get => this.swapChainExtent; }
         public Pipeline Pipeline { get => this.graphicsPipeline; }
-        /* TEMPORARY */ public Model Model { get => this.model; }
-        /* TEMPORARY */ public Buffer VertexBuffer { get => this.vertexBuffer; }
-        /* TEMPORARY */ public Buffer IndexBuffer { get => this.indexBuffer; }
         public PipelineLayout PipelineLayout { get => this.pipelineLayout; }
         public DescriptorSet[] DescriptorSets { get => this.descriptorSets; }
         private void FramebufferResized(Silk.NET.Maths.Vector2D<int> obj)
@@ -113,6 +106,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
         private void InitVulkan()
         {
+
             CreateInstance();
             SetupDebugMessenger();
             CreateSurface();
@@ -130,12 +124,17 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateTextureImage();
             CreateTextureImageView();
             CreateTextureSampler();
-            CreateVertexBuffer();
-            CreateIndexBuffer();
             CreateUniformBuffers();
             CreateDescriptorPool();
             CreateDescriptorSets();
-            this.commandBuffers = new VulkanCommandBuffers(this, swapChainFramebuffers!.Length);
+
+            var model = new Model(MODEL_PATH);
+            var modelsCollection = new ModelsCollection();
+            modelsCollection.AddModel(model);
+            this.modelsBuffer = new VulkanModelsBuffer(this);
+            this.modelsBuffer.BindModels(modelsCollection);
+
+            this.commandBuffers = new VulkanCommandBuffers(this, modelsBuffer, swapChainFramebuffers!.Length);
             CreateSyncObjects();
             appWindow!.Render += DrawFrame;
         }
@@ -1189,7 +1188,7 @@ namespace ConsoleApp1.Engine.Vulkan
             GenerateMipMaps(textureImage, Format.R8G8B8A8Srgb, (uint)img.Width, (uint)img.Height, mipLevels);
         }
 
-        private void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
+        public void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Buffer buffer, ref DeviceMemory bufferMemory)
         {
             BufferCreateInfo bufferInfo = new()
             {
@@ -1452,7 +1451,7 @@ namespace ConsoleApp1.Engine.Vulkan
             vk!.FreeCommandBuffers(device, commandPool, 1, commandBuffer);
         }
 
-        private void CopyBuffer(Buffer srcBuffer, Buffer dstBuffer, ulong size)
+        public void CopyBuffer(Buffer srcBuffer, Buffer dstBuffer, ulong size)
         {
             CommandBuffer commandBuffer = BeginSingleTimeCommands();
 
@@ -1505,47 +1504,6 @@ namespace ConsoleApp1.Engine.Vulkan
             }
         }
 
-        private void CreateVertexBuffer()
-        {
-            ulong bufferSize = (ulong)(Unsafe.SizeOf<Vertex>() * this.model.VerticesLength);
-
-            Buffer stagingBuffer = default;
-            DeviceMemory stagingBufferMemory = default;
-            CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
-
-            void* data;
-            vk!.MapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            this.model.Vertices.AsSpan().CopyTo(new Span<Vertex>(data, this.model.VerticesLength));
-            vk!.UnmapMemory(device, stagingBufferMemory);
-
-            CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref vertexBuffer, ref vertexBufferMemory);
-
-            CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-            vk!.DestroyBuffer(device, stagingBuffer, null);
-            vk!.FreeMemory(device, stagingBufferMemory, null);
-        }
-
-        private void CreateIndexBuffer()
-        {
-            ulong bufferSize = (ulong)(Unsafe.SizeOf<uint>() * this.model.IndicesLength);
-
-            Buffer stagingBuffer = default;
-            DeviceMemory stagingBufferMemory = default;
-            CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
-
-            void* data;
-            vk!.MapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            this.model.Indices.AsSpan().CopyTo(new Span<uint>(data, this.model.IndicesLength));
-            vk!.UnmapMemory(device, stagingBufferMemory);
-
-            CreateBuffer(bufferSize, BufferUsageFlags.TransferDstBit | BufferUsageFlags.IndexBufferBit, MemoryPropertyFlags.DeviceLocalBit, ref indexBuffer, ref indexBufferMemory);
-
-            CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-            vk!.DestroyBuffer(device, stagingBuffer, null);
-            vk!.FreeMemory(device, stagingBufferMemory, null);
-        }
 
         private void CreateUniformBuffers()
         {
@@ -1815,7 +1773,7 @@ namespace ConsoleApp1.Engine.Vulkan
             CreateUniformBuffers();
             CreateDescriptorPool();
             CreateDescriptorSets();
-            this.commandBuffers = new VulkanCommandBuffers(this, swapChainFramebuffers!.Length);
+            this.commandBuffers = new VulkanCommandBuffers(this, this.modelsBuffer, swapChainFramebuffers!.Length);
 
             imagesInFlight = new Fence[swapChainImages!.Length];
         }
@@ -1893,11 +1851,7 @@ namespace ConsoleApp1.Engine.Vulkan
 
             vk!.DestroyDescriptorSetLayout(device, descriptorSetLayout, null);
 
-            vk!.DestroyBuffer(device, indexBuffer, null);
-            vk!.FreeMemory(device, indexBufferMemory, null);
-
-            vk!.DestroyBuffer(device, vertexBuffer, null);
-            vk!.FreeMemory(device, vertexBufferMemory, null);
+            this.modelsBuffer.Dispose();
 
             for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
