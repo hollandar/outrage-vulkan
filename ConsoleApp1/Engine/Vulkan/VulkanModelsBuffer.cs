@@ -9,11 +9,12 @@ namespace ConsoleApp1.Engine.Vulkan
     public class ModelOffset
     {
         public ulong VertexOffset;
-        public ulong IndexOffset;
+        public ulong IndexOffsetBytes;
         internal ulong VertexSize;
         internal ulong IndexSize;
         internal ulong VertexCount;
         internal ulong IndexCount;
+        internal ulong IndexOffset;
     }
 
     public class VulkanModelsBuffer : IDisposable
@@ -101,14 +102,15 @@ namespace ConsoleApp1.Engine.Vulkan
             foreach (var modelId in modelsCollection.ModelIds)
             {
                 var model = modelsCollection.GetModel(modelId);
-                ulong indexOffset = (ulong)Unsafe.SizeOf<Vertex>() * indices;
-                ulong indexBufferSize = (ulong)(Unsafe.SizeOf<Vertex>() * model.VertexCount);
+                ulong indexOffset = (ulong)Unsafe.SizeOf<uint>() * indices;
+                ulong indexBufferSize = (ulong)(Unsafe.SizeOf<uint>() * model.IndexCount);
 
                 vulkanEngine.Api.MapMemory(vulkanEngine.Device, stagingBufferMemory, indexOffset, indexBufferSize, 0, &data);
                 model.Indices.AsSpan().CopyTo(new Span<uint>(data, model.IndexCount));
                 vulkanEngine.Api.UnmapMemory(vulkanEngine.Device, stagingBufferMemory);
                 
-                modelOffsets[modelId].IndexOffset = indexOffset;
+                modelOffsets[modelId].IndexOffsetBytes = indexOffset;
+                modelOffsets[modelId].IndexOffset = indices;
                 modelOffsets[modelId].IndexSize = indexBufferSize;
                 modelOffsets[modelId].IndexCount = (ulong)model.IndexCount;
                 indices += (ulong)model.IndexCount;
