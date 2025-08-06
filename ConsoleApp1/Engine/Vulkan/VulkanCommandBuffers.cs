@@ -112,7 +112,11 @@ namespace ConsoleApp1.Engine.Vulkan
 
             vulkanEngine.Api.CmdBindIndexBuffer(commandBuffer, modelBuffers.IndexBuffer, modelOffset.IndexOffsetBytes, IndexType.Uint32);
 
-            vulkanEngine.Api.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, vulkanEngine.PipelineLayout, 0, 1, vulkanEngine.DescriptorSets![i], 0, null);
+            var offsetCounts = new uint[] { 0 };
+            fixed (uint* offsetCountsPtr = offsetCounts)
+            {
+                vulkanEngine.Api.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, vulkanEngine.PipelineLayout, 0, 1, vulkanEngine.DescriptorSets![i], 1, offsetCountsPtr);
+            }
 
             vulkanEngine.Api.CmdDrawIndexed(commandBuffer, (uint)modelOffset.IndexCount, 1, (uint)modelOffset.IndexOffset, (int)modelOffset.VertexOffset, 0);
 
