@@ -1,4 +1,5 @@
 ﻿using ConsoleApp1.Engine.Models;
+using ConsoleApp1.Engine.Scenes;
 using ConsoleApp1.Engine.Textures;
 using ConsoleApp1.Engine.Windowing;
 using Silk.NET.Core;
@@ -135,6 +136,9 @@ namespace ConsoleApp1.Engine.Vulkan
             modelsCollection.AddModel(model);
             this.modelsBuffer = new VulkanModelsBuffer(this);
             this.modelsBuffer.BindModels(modelsCollection);
+
+            var node = new ModelNode(0, 0, Vector3D<float>.Zero);
+            var scene = new Scene("Scene", node);
 
             this.commandBuffers = new VulkanCommandBuffers(this, modelsBuffer, swapChainFramebuffers!.Length);
             CreateSyncObjects();
